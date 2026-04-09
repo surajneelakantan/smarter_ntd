@@ -689,7 +689,7 @@ class FormatHandler:
 
 
 class SMARTERChatbot:
-    def __init__(self, cfg: Optional[Config] = None):
+    def __init__(self, cfg: Optional[Config] = None, db=None, session_id=None):
         self.cfg = cfg or Config()
         ensure_ollama_ready(self.cfg)
         self.df = load_data(self.cfg)
@@ -712,6 +712,8 @@ class SMARTERChatbot:
         self.last: List[Hit] = []
         self.modules: List[Module] = []
         self._pending_topic_choice: Optional[List[str]] = None
+        self.db = db
+        self.session_id = session_id
 
         for i, row in self.df.iterrows():
             self.modules.append(Module(
@@ -1320,6 +1322,14 @@ class SMARTERChatbot:
                 still_missing = self.info_collector.get_missing_fields(
                     self.user)
                 if not still_missing:
+                    if self.db and self.session_id:
+                        self.db.update_session_slots(
+                            self.session_id,
+                            self.user.topic,
+                            self.user.profession,
+                            self.user.hours,
+                            self.user.format
+                        )
                     return self._generate_learning_path()
                 else:
                     response = llm_response.get(
@@ -1451,7 +1461,8 @@ def main():
         print(f"\nWelcome, {identifier}! Let's create your first learning plan.\n")
 
     session_id = db.create_session(user_id)
-
+    bot.db = db
+    bot.session_id = session_id
 
     print("SMARTER Course Planner - Örebro University")
     print("\nWhat do you want to learn?")

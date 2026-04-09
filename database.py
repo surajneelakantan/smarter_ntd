@@ -161,6 +161,20 @@ class DatabaseManager:
             log.info("Created session: %s for user: %s", session_id, user_id)
             return session_id
 
+    def update_session_slots(self, session_id: str, topic: str,
+                              profession: str, hours_budget: float,
+                              learning_format: str) -> None:
+        """Update session with slot-filling results."""
+        with self._get_cursor() as cur:
+            cur.execute(
+                """UPDATE sessions
+                   SET topic = %s, profession = %s,
+                       hours_budget = %s, learning_format = %s,
+                       last_active = NOW()
+                   WHERE session_id = %s""",
+                (topic, profession, hours_budget, learning_format, session_id)
+            )
+
     def update_session_state(self, session_id: str, state: str) -> None:
         """Update session state (e.g., slot_filling -> plan_presented -> module_qa)."""
         with self._get_cursor() as cur:
