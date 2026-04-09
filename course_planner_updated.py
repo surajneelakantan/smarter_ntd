@@ -23,6 +23,7 @@ import zipper_prep
 import cli_streamlit_compat
 import ollama
 from sentence_transformers import SentenceTransformer
+from database import DatabaseManager
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -1418,9 +1419,39 @@ def main():
     try:
         ensure_ollama_ready(cfg)
         bot = SMARTERChatbot(cfg=cfg)
+        db = DatabaseManager() ## This is to initialize the memory when the chatbot is started.
     except Exception as e:
         print(f"\nStartup error: {e}")
         sys.exit(1)
+
+
+    ## adding the user identification
+    try:
+        identifier = input("Enter your user ID or name: ").strip()
+        if not identifier:
+            identifier = "anonymous_user"
+    except (EOFError, KeyboardInterrupt):
+            print("\n\nGoodbye!")
+            sys.exit(0)
+
+    user = db.get_or_create_user(identifier)
+    user_id = str(user["user_id"])
+
+    ## check for past sessions
+    past_sessions = db.get_user_sessions(user_id)
+    if past_sessions:
+        print(f"\nWelcome back, {identifier}! You have {len(past_sessions)} past session(s).")
+        for i, s in enumerate(past_sessions[:5], 1):
+            topic = s.get("topic", "unknown topic")
+            date = s["last_active"].strftime("%Y-%m-%d %H:%M")
+            print(f"  {i}. {topic} (last active: {date})")
+        print(f"N. Start a new session")
+        print()
+    else:
+        print(f"\nWelcome, {identifier}! Let's create your first learning plan.\n")
+
+    session_id = db.create_session(user_id)
+
 
     print("SMARTER Course Planner - Örebro University")
     print("\nWhat do you want to learn?")
@@ -1430,17 +1461,23 @@ def main():
         try:
             user_input = input("\nYou: ").strip()
         except (EOFError, KeyboardInterrupt):
+            db.touch_session(session_id)
+            db.update_last_seen(user_id)
             print("\n\nGoodbye! Happy learning!")
             break
 
         if not user_input:
             continue
         if user_input.lower() in ("quit", "exit", "bye", "goodbye", "q"):
+            db.touch_session(session_id)  # Update last active time
+            db.update_last_seen(user_id)  # Update user last seen
             print("\nGoodbye! Happy learning!")
             break
 
         try:
+            db.save_message(session_id, "user", user_input)
             resp = bot.process_message(user_input)
+            db.save_message(session_id, "assistant", resp)
             print(f"\nAssistant: {resp}")
         except Exception as e:
             log.error("Error: %s", e, exc_info=True)
