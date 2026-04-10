@@ -1393,6 +1393,20 @@ class SMARTERChatbot:
         exps = self._generate_explanations(self.user.topic, self.user.profession, [
                                            h.module for h in selected])
         self.last = selected
+        if self.db and self.session_id:
+            modules_data = [
+                {
+                    "module_idx": h.module.idx,
+                    "pdf_name": h.module.pdf_name,
+                    "video_name": h.module.video_name,
+                    "course": h.module.course,
+                    "duration": int(self.format_handler.duration_for_format(
+                        h.module, self.user.format))
+                }
+                for h in selected
+            ]
+            self.db.store_recommended_modules(self.session_id, modules_data)
+            self.db.update_session_state(self.session_id, "plan_presented")
         return self._create_learning_path(selected, exps)
 
     def _save_plan(self) -> str:
