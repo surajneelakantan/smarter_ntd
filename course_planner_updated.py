@@ -1474,7 +1474,50 @@ def main():
     else:
         print(f"\nWelcome, {identifier}! Let's create your first learning plan.\n")
 
-    session_id = db.create_session(user_id)
+    session_id = None
+
+    if past_sessions:
+        try:
+            choice = input("Choose a session number or N for new: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye!")
+            sys.exit(0)
+
+        if choice.isdigit() and 1 <= int(choice) <= min(len(past_sessions), 5):
+            # Resume existing session
+            chosen = past_sessions[int(choice) - 1]
+            session_id = str(chosen["session_id"])
+            
+            # Load full session data
+            session_data = db.get_session(session_id)
+            
+            # Restore user profile
+            if session_data.get("topic"):
+                bot.user.topic = session_data["topic"]
+            if session_data.get("hours_budget"):
+                bot.user.hours = session_data["hours_budget"]
+            if session_data.get("profession"):
+                bot.user.profession = session_data["profession"]
+            if session_data.get("learning_format"):
+                bot.user.format = session_data["learning_format"]
+
+            # Display past messages
+            past_messages = db.get_session_messages(session_id, limit=20)
+            if past_messages:
+                print("\n--- Previous conversation ---")
+                for m in past_messages:
+                    role_label = "You" if m["role"] == "user" else "Assistant"
+                    # content_preview = m["content"][:200]
+                    content_preview = m["content"] ## This will show the full content of the message, not just a preview. Adjust as needed.
+                    print(f"{role_label}: {content_preview}")
+                print("--- End of history ---\n")
+
+            print(f"Resumed session: {session_data.get('topic', 'No topic')}")
+            print("Continue the conversation or type 'reset' to start fresh.\n")
+
+    if session_id is None:
+        session_id = db.create_session(user_id)
+
     bot.db = db
     bot.session_id = session_id
 
