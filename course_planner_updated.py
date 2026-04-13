@@ -25,6 +25,9 @@ import ollama
 from sentence_transformers import SentenceTransformer
 from database import DatabaseManager
 
+from message_router import classify_message
+from knowledge_window import build_single_module_context
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 logging.basicConfig(level=logging.INFO,
@@ -1354,8 +1357,18 @@ class SMARTERChatbot:
                 # Fallback to simple prompting
                 return self._ask_for_next_missing_field(missing_fields[0])
         else:
-            # All required info collected, generate the learning path
-            return self._generate_learning_path()
+            if self.last:
+                return self._handle_post_plan_message(msg)
+            else:
+                if self.db and self.session_id:
+                    self.db.update_session_slots(
+                        session_id=self.session_id,
+                        topic=self.user.topic,
+                        profession=self.user.profession,
+                        hours_budget=self.user.hours,
+                        learning_format=self.user.format
+                    )
+                return self._generate_learning_path()
 
     def _continue_after_topic_selection(self) -> str:
         """Continue flow after topic selection"""
@@ -1364,6 +1377,26 @@ class SMARTERChatbot:
             return self._generate_learning_path()
         else:
             return self._ask_for_next_missing_field(missing_fields[0])
+            
+    def _handle_post_plan_message(self, msg):
+        """Handle messages after the learning plan has been presented."""
+        modules_for_router = [
+            {
+                "module_idx": h.module.idx,
+                "pdf_name": h.module.pdf_name,
+                "course": h.module.course,
+            }
+            for h in self.last
+        ]
+
+        classification = classify_message(msg, modules_for_router, self.cfg.llm_model)
+        msg_type = classification["type"]
+
+        log.info(f"Router classified as: {msg_type}")
+
+        return f"[Router says: {msg_type}] Your message was classified. Full handling coming next."
+
+        
 
     def _generate_learning_path(self) -> str:
         """Generate the actual learning path after all slots are filled"""
